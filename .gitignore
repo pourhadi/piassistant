@@ -1,0 +1,108 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+.npm
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pyatv_env/
+.venv/
+venv/
+
+# Configuration files with sensitive data
+config.json
+mcp_config.json
+.env
+.env.local
+
+# API Keys and secrets
+*.key
+*.pem
+.bashrc.backup
+
+# Logs
+*.log
+voice_system.log
+control_center.log
+audio_debug.log
+logs/
+
+# Audio files (except examples)
+*.wav
+*.mp3
+tng_beeps/
+majel_voice_clips/
+vosk-model*/
+!examples/*.mp3
+
+# Temporary files
+*.tmp
+*.temp
+test_mic.wav
+.DS_Store
+Thumbs.db
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# System files
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Raspberry Pi specific
+gpio/
+/boot/
+/dev/
+/proc/
+/sys/
+
+# Backup files
+*.bak
+*.backup
+config.json.backup
+
+# SSH keys
+id_rsa*
+authorized_keys
+
+# Homebridge data
+homebridge/
+persist/
+
+# MCP server data
+mcp_data/
+*.sqlite
+*.db
+
+# Runtime files
+*.pid
+*.socket

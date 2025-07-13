@@ -1,0 +1,70 @@
+{
+  "name": "enterprise-voice-control",
+  "version": "1.0.0",
+  "description": "USS Enterprise NCC-1701-D Voice Control System - Raspberry Pi AI assistant with Star Trek computer interface",
+  "main": "enterprise-control-simple.js",
+  "type": "module",
+  "bin": {
+    "enterprise-control": "./enterprise-control-simple.js"
+  },
+  "scripts": {
+    "start": "node enterprise-control-simple.js",
+    "control": "node enterprise-control-simple.js",
+    "dev": "node enterprise-control-simple.js",
+    "setup": "chmod +x scripts/*.sh && echo 'Setup scripts ready. Run ./scripts/setup_audio.sh and ./scripts/setup_homekit.sh'",
+    "audio-setup": "./scripts/setup_audio.sh",
+    "homekit-setup": "./scripts/setup_homekit.sh",
+    "install-pi": "python3 -m venv pyatv_env && source pyatv_env/bin/activate && pip install -r requirements.txt",
+    "test": "echo 'Testing Enterprise systems...' && node --version && python3 --version",
+    "lint": "prettier --check *.js",
+    "format": "prettier --write *.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/enterprise-voice-control.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/enterprise-voice-control/issues"
+  },
+  "homepage": "https://github.com/yourusername/enterprise-voice-control#readme",
+  "keywords": [
+    "raspberry-pi",
+    "voice-control",
+    "star-trek",
+    "enterprise",
+    "ai-assistant",
+    "homekit",
+    "apple-tv",
+    "cli",
+    "ink",
+    "react",
+    "tng",
+    "smart-home",
+    "mcp"
+  ],
+  "author": "Enterprise Computer Systems",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "python": ">=3.8"
+  },
+  "dependencies": {
+    "@babel/core": "^7.28.0",
+    "@babel/preset-react": "^7.27.1",
+    "@babel/register": "^7.27.1",
+    "@types/react": "^19.1.8",
+    "ink": "^6.0.1",
+    "react": "^19.1.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.0.0"
+  },
+  "os": [
+    "linux",
+    "darwin"
+  ],
+  "cpu": [
+    "arm64",
+    "x64"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "piAddress": "pi@raspberrypi.local",
+  "piPath": "/home/pi",
+  "appleTV": {
+    "deviceId": "6DD04867-AD74-4FE7-AFD2-30BA83DFD648",
+    "name": "Living Room Apple TV"
+  },
+  "homekit": {
+    "homebridgeUrl": "http://homebridge.local:8581",
+    "credentials": {
+      "username": "admin",
+      "password": "your-homebridge-password"
+    }
+  },
+  "audio": {
+    "microphoneIndex": "2,0",
+    "bluetoothSpeaker": "13:95:F2:0A:0D:53",
+    "ttsVoice": "alloy",
+    "elevenlabsVoice": "rachel"
+  },
+  "voice": {
+    "wakeWord": "computer",
+    "conversationTimeout": 30,
+    "enableMemory": true,
+    "maxMemoryEntries": 100
+  },
+  "redAlert": {
+    "enabled": true,
+    "lightDevice": "Govee Floor Lamp",
+    "duration": 10,
+    "audioFile": "tng_red_alert1.mp3"
+  },
+  "mcp": {
+    "configPath": "/home/pi/mcp_config.json",
+    "autoRestart": true
+  },
+  "logging": {
+    "level": "INFO",
+    "enableDebug": false,
+    "logFile": "voice_system.log"
+  }
+}
