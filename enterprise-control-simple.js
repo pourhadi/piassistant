@@ -233,8 +233,8 @@ python conversational_voice_control.py`;
 				if (!voiceDashboardActive) return;
 				
 				try {
-					// Get recent voice activity from logs
-					const result = execSync(`ssh ${config.piAddress} "tail -n 50 voice_system.log | grep -E 'Wake word|Transcription|Claude response|Apple TV|HomeKit|ERROR' | tail -20"`, { 
+					// Get recent voice activity from logs with the actual log patterns
+					const result = execSync(`ssh ${config.piAddress} "tail -n 100 voice_system.log | grep -E '🎯 WAKE WORD|📝 Processing command|📝 Command collected|💬 Follow-up|💬 Processing follow-up|📺 Apple TV|🏠 HomeKit|❌|ERROR|TTS|🔊' | tail -30"`, { 
 						encoding: 'utf8',
 						timeout: 3000
 					});
@@ -248,75 +248,97 @@ python conversational_voice_control.py`;
 					let stats = { ...voiceStats };
 					
 					logLines.forEach((line, index) => {
-						if (line.includes('Wake word detected')) {
-							const wakeWordMatch = line.match(/Wake word detected: (.+)/);
-							if (wakeWordMatch) {
-								stats.lastWakeWord = new Date().toLocaleTimeString();
-								newCommands.push({
-									id: `wake-${timestamp}-${index}`,
-									type: 'wake',
-									timestamp: new Date().toLocaleTimeString(),
-									content: `🎙️ Wake word: "${wakeWordMatch[1]}"`,
-									status: 'detected'
-								});
-							}
-						} else if (line.includes('Transcription:')) {
-							const transcriptionMatch = line.match(/Transcription: (.+)/);
-							if (transcriptionMatch) {
-								stats.totalCommands++;
+						// Extract timestamp from log line if available [HH:MM:SS]
+						const logTimeMatch = line.match(/\[(\d{2}:\d{2}:\d{2})\]/);
+						const logTime = logTimeMatch ? logTimeMatch[1] : timestamp;
+						
+						if (line.includes('🎯 WAKE WORD!')) {
+							const wakeWordMatch = line.match(/🎯 WAKE WORD! \(#(\d+)\)/);
+							const count = wakeWordMatch ? wakeWordMatch[1] : '?';
+							stats.lastWakeWord = logTime;
+							stats.totalCommands++;
+							newCommands.push({
+								id: `wake-${timestamp}-${index}`,
+								type: 'wake',
+								timestamp: logTime,
+								content: `🎙️ Wake word detected (#${count})`,
+								status: 'detected'
+							});
+						} else if (line.includes('📝 Processing command:') || line.includes('📝 Command collected:')) {
+							const commandMatch = line.match(/📝 (?:Processing command|Command collected): '(.+?)'/);
+							if (commandMatch) {
 								newCommands.push({
 									id: `transcription-${timestamp}-${index}`,
 									type: 'transcription',
-									timestamp: new Date().toLocaleTimeString(),
-									content: `📝 "${transcriptionMatch[1]}"`,
+									timestamp: logTime,
+									content: `📝 "${commandMatch[1]}"`,
 									status: 'processing'
 								});
 							}
-						} else if (line.includes('Claude response:')) {
-							const responseMatch = line.match(/Claude response: (.+)/);
-							if (responseMatch) {
+						} else if (line.includes('💬 Follow-up') || line.includes('💬 Processing follow-up')) {
+							const followupMatch = line.match(/💬 (?:Follow-up response|Processing follow-up): '(.+?)'/);
+							if (followupMatch) {
+								newCommands.push({
+									id: `followup-${timestamp}-${index}`,
+									type: 'transcription',
+									timestamp: logTime,
+									content: `💬 "${followupMatch[1]}"`,
+									status: 'processing'
+								});
+							}
+						} else if (line.includes('🔊') && (line.includes('TTS') || line.includes('Speaking'))) {
+							// Capture TTS responses as AI responses
+							const ttsMatch = line.match(/🔊.*?(?:TTS|Speaking).*?[:"'](.+?)[:"']/) || 
+							                  line.match(/🔊.*?(.{10,100}?)$/);
+							if (ttsMatch) {
 								stats.successfulCommands++;
 								stats.conversationActive = true;
+								const responseText = ttsMatch[1].length > 80 ? 
+									ttsMatch[1].substring(0, 80) + '...' : ttsMatch[1];
 								newCommands.push({
 									id: `response-${timestamp}-${index}`,
 									type: 'response',
-									timestamp: new Date().toLocaleTimeString(),
-									content: `🤖 "${responseMatch[1].substring(0, 100)}${responseMatch[1].length > 100 ? '...' : ''}"`,
+									timestamp: logTime,
+									content: `🤖 "${responseText}"`,
 									status: 'success'
 								});
 							}
-						} else if (line.includes('Apple TV')) {
-							const tvMatch = line.match(/Apple TV: (.+)/);
+						} else if (line.includes('📺 Apple TV')) {
+							const tvMatch = line.match(/📺 Apple TV.*?[:]\s*(.+)/) || 
+							               line.match(/📺.*?(.{10,50})/);
 							if (tvMatch) {
 								stats.successfulCommands++;
 								newCommands.push({
 									id: `appletv-${timestamp}-${index}`,
 									type: 'appletv',
-									timestamp: new Date().toLocaleTimeString(),
+									timestamp: logTime,
 									content: `📺 Apple TV: ${tvMatch[1]}`,
 									status: 'success'
 								});
 							}
-						} else if (line.includes('HomeKit')) {
-							const homeMatch = line.match(/HomeKit: (.+)/);
+						} else if (line.includes('🏠') && line.includes('HomeKit')) {
+							const homeMatch = line.match(/🏠.*?HomeKit.*?[:]\s*(.+)/) || 
+							                  line.match(/🏠.*?(.{10,50})/);
 							if (homeMatch) {
 								stats.successfulCommands++;
 								newCommands.push({
 									id: `homekit-${timestamp}-${index}`,
 									type: 'homekit',
-									timestamp: new Date().toLocaleTimeString(),
+									timestamp: logTime,
 									content: `🏠 HomeKit: ${homeMatch[1]}`,
 									status: 'success'
 								});
 							}
-						} else if (line.includes('ERROR')) {
-							const errorMatch = line.match(/ERROR: (.+)/);
+						} else if (line.includes('❌') || line.includes('ERROR')) {
+							const errorMatch = line.match(/❌.*?(?:ERROR)?[:]\s*(.+)/) || 
+							                   line.match(/ERROR[:]\s*(.+)/) ||
+							                   line.match(/❌(.{10,80})/);
 							if (errorMatch) {
 								stats.failedCommands++;
 								newCommands.push({
 									id: `error-${timestamp}-${index}`,
 									type: 'error',
-									timestamp: new Date().toLocaleTimeString(),
+									timestamp: logTime,
 									content: `❌ Error: ${errorMatch[1]}`,
 									status: 'error'
 								});
@@ -324,16 +346,38 @@ python conversational_voice_control.py`;
 						}
 					});
 					
-					// Update state with new commands (keep last 15 for display)
-					setVoiceCommands(prev => {
-						const updated = [...prev, ...newCommands];
-						return updated.slice(-15); // Keep last 15 commands
-					});
+					// Only add new commands that we haven't seen before
+					if (newCommands.length > 0) {
+						setVoiceCommands(prev => {
+							// Filter out commands we already have by checking content and timestamp
+							const existingContents = prev.map(cmd => `${cmd.timestamp}-${cmd.content}`);
+							const uniqueNewCommands = newCommands.filter(cmd => 
+								!existingContents.includes(`${cmd.timestamp}-${cmd.content}`)
+							);
+							
+							if (uniqueNewCommands.length > 0) {
+								const updated = [...prev, ...uniqueNewCommands];
+								return updated.slice(-15); // Keep last 15 commands
+							}
+							return prev;
+						});
+					}
 					
-					setVoiceStats(stats);
+					// Update stats (but preserve cumulative counts)
+					setVoiceStats(prevStats => ({
+						...prevStats,
+						lastWakeWord: stats.lastWakeWord || prevStats.lastWakeWord,
+						conversationActive: stats.conversationActive || prevStats.conversationActive,
+						// Only increment counters if we have new commands
+						totalCommands: Math.max(prevStats.totalCommands, stats.totalCommands || 0),
+						successfulCommands: Math.max(prevStats.successfulCommands, stats.successfulCommands || 0),
+						failedCommands: Math.max(prevStats.failedCommands, stats.failedCommands || 0)
+					}));
 					
 				} catch (error) {
 					// Silent error handling for dashboard
+					// In debug mode, you could uncomment this:
+					// console.log('Dashboard update error:', error);
 				}
 			};
 			
@@ -1847,7 +1891,17 @@ python conversational_voice_control.py`;
 			
 			h(Text, { color: 'white' }, ''),
 			h(Text, { color: 'gray' }, '🎮 Press Enter, Esc, or Q to return to menu'),
-			h(Text, { color: 'green' }, '💡 Tip: Try saying "Computer, what time is it?" to see live updates!')
+			h(Text, { color: 'green' }, '💡 Tip: Try saying "Computer, what time is it?" to see live updates!'),
+			
+			// Debug info (only show if no commands yet)
+			voiceCommands.length === 0 ? h(Box, { flexDirection: 'column', marginTop: 1 },
+				h(Text, { color: 'yellow' }, '🔍 Debug: Monitoring voice_system.log for patterns:'),
+				h(Text, { color: 'gray' }, '  • 🎯 WAKE WORD! - for wake word detection'),
+				h(Text, { color: 'gray' }, '  • 📝 Processing command: - for voice commands'),
+				h(Text, { color: 'gray' }, '  • 🔊 Speaking - for AI responses'),
+				h(Text, { color: 'gray' }, '  • 📺 Apple TV - for Apple TV commands'),
+				h(Text, { color: 'gray' }, '  • 🏠 HomeKit - for smart home commands')
+			) : null
 		);
 	}
 
