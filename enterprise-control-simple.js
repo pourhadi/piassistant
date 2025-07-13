@@ -52,6 +52,20 @@ const EnterpriseControlCenter = () => {
 	const [showingActionResult, setShowingActionResult] = useState(false);
 	const [mcpServersForRemoval, setMcpServersForRemoval] = useState([]);
 	const [showingRemovalMenu, setShowingRemovalMenu] = useState(false);
+	
+	// Live Voice Dashboard state
+	const [voiceDashboardActive, setVoiceDashboardActive] = useState(false);
+	const [voiceCommands, setVoiceCommands] = useState([]);
+	const [voiceStats, setVoiceStats] = useState({
+		totalCommands: 0,
+		successfulCommands: 0,
+		failedCommands: 0,
+		conversationActive: false,
+		lastWakeWord: null,
+		currentContext: '',
+		sessionStartTime: null
+	});
+	const [voiceDashboardInterval, setVoiceDashboardInterval] = useState(null);
 
 	// Check voice system status on Pi
 	const checkVoiceSystemStatus = () => {
@@ -191,11 +205,158 @@ python conversational_voice_control.py`;
 					}, 2000);
 					setLogUpdateInterval(interval);
 					break;
+				case 5: // Live Voice Dashboard
+					setVoiceDashboardActive(true);
+					startVoiceDashboard();
+					break;
 			}
 			setTimeout(checkVoiceSystemStatus, 1000);
 		} catch (error) {
 			// Silent error handling - no console spam
 		}
+	};
+
+	// Live Voice Dashboard Functions
+	const startVoiceDashboard = () => {
+		try {
+			// Initialize session
+			setVoiceStats(prev => ({
+				...prev,
+				sessionStartTime: new Date(),
+				totalCommands: 0,
+				successfulCommands: 0,
+				failedCommands: 0
+			}));
+			
+			// Start monitoring voice system
+			const updateVoiceDashboard = () => {
+				if (!voiceDashboardActive) return;
+				
+				try {
+					// Get recent voice activity from logs
+					const result = execSync(`ssh ${config.piAddress} "tail -n 50 voice_system.log | grep -E 'Wake word|Transcription|Claude response|Apple TV|HomeKit|ERROR' | tail -20"`, { 
+						encoding: 'utf8',
+						timeout: 3000
+					});
+					
+					// Parse log entries into structured commands
+					const logLines = result.split('\n').filter(line => line.trim());
+					const timestamp = new Date().toLocaleTimeString();
+					
+					// Process new voice commands
+					const newCommands = [];
+					let stats = { ...voiceStats };
+					
+					logLines.forEach((line, index) => {
+						if (line.includes('Wake word detected')) {
+							const wakeWordMatch = line.match(/Wake word detected: (.+)/);
+							if (wakeWordMatch) {
+								stats.lastWakeWord = new Date().toLocaleTimeString();
+								newCommands.push({
+									id: `wake-${timestamp}-${index}`,
+									type: 'wake',
+									timestamp: new Date().toLocaleTimeString(),
+									content: `🎙️ Wake word: "${wakeWordMatch[1]}"`,
+									status: 'detected'
+								});
+							}
+						} else if (line.includes('Transcription:')) {
+							const transcriptionMatch = line.match(/Transcription: (.+)/);
+							if (transcriptionMatch) {
+								stats.totalCommands++;
+								newCommands.push({
+									id: `transcription-${timestamp}-${index}`,
+									type: 'transcription',
+									timestamp: new Date().toLocaleTimeString(),
+									content: `📝 "${transcriptionMatch[1]}"`,
+									status: 'processing'
+								});
+							}
+						} else if (line.includes('Claude response:')) {
+							const responseMatch = line.match(/Claude response: (.+)/);
+							if (responseMatch) {
+								stats.successfulCommands++;
+								stats.conversationActive = true;
+								newCommands.push({
+									id: `response-${timestamp}-${index}`,
+									type: 'response',
+									timestamp: new Date().toLocaleTimeString(),
+									content: `🤖 "${responseMatch[1].substring(0, 100)}${responseMatch[1].length > 100 ? '...' : ''}"`,
+									status: 'success'
+								});
+							}
+						} else if (line.includes('Apple TV')) {
+							const tvMatch = line.match(/Apple TV: (.+)/);
+							if (tvMatch) {
+								stats.successfulCommands++;
+								newCommands.push({
+									id: `appletv-${timestamp}-${index}`,
+									type: 'appletv',
+									timestamp: new Date().toLocaleTimeString(),
+									content: `📺 Apple TV: ${tvMatch[1]}`,
+									status: 'success'
+								});
+							}
+						} else if (line.includes('HomeKit')) {
+							const homeMatch = line.match(/HomeKit: (.+)/);
+							if (homeMatch) {
+								stats.successfulCommands++;
+								newCommands.push({
+									id: `homekit-${timestamp}-${index}`,
+									type: 'homekit',
+									timestamp: new Date().toLocaleTimeString(),
+									content: `🏠 HomeKit: ${homeMatch[1]}`,
+									status: 'success'
+								});
+							}
+						} else if (line.includes('ERROR')) {
+							const errorMatch = line.match(/ERROR: (.+)/);
+							if (errorMatch) {
+								stats.failedCommands++;
+								newCommands.push({
+									id: `error-${timestamp}-${index}`,
+									type: 'error',
+									timestamp: new Date().toLocaleTimeString(),
+									content: `❌ Error: ${errorMatch[1]}`,
+									status: 'error'
+								});
+							}
+						}
+					});
+					
+					// Update state with new commands (keep last 15 for display)
+					setVoiceCommands(prev => {
+						const updated = [...prev, ...newCommands];
+						return updated.slice(-15); // Keep last 15 commands
+					});
+					
+					setVoiceStats(stats);
+					
+				} catch (error) {
+					// Silent error handling for dashboard
+				}
+			};
+			
+			// Initial load
+			updateVoiceDashboard();
+			
+			// Start real-time updates every 1.5 seconds
+			const interval = setInterval(updateVoiceDashboard, 1500);
+			setVoiceDashboardInterval(interval);
+			
+		} catch (error) {
+			showActionResult('❌ VOICE DASHBOARD FAILED', 
+				`Failed to start voice dashboard:\n\n${error.message}`, 'error');
+		}
+	};
+
+	const stopVoiceDashboard = () => {
+		setVoiceDashboardActive(false);
+		if (voiceDashboardInterval) {
+			clearInterval(voiceDashboardInterval);
+			setVoiceDashboardInterval(null);
+		}
+		setVoiceCommands([]);
 	};
 
 	// MCP Client actions - Dynamic server management
@@ -1273,6 +1434,7 @@ python conversational_voice_control.py`;
 					'🔄 Restart Voice System',
 					'📊 System Diagnostics',
 					'📜 View Live Logs',
+					'🎤 Live Voice Dashboard',
 					'⬅️ Back to Main Menu'
 				];
 			case 'mcp':
@@ -1372,10 +1534,21 @@ python conversational_voice_control.py`;
 				break;
 				
 			case 'voice':
-				if (selectedIndex === 5) { // Back
+				if (selectedIndex === 6) { // Back (updated to 6 due to new dashboard option)
 					setCurrentScreen('main');
 					setSelectedIndex(0);
-				} else if (selectedIndex <= 4) {
+					// Clean up any active intervals
+					if (logUpdateInterval) {
+						clearInterval(logUpdateInterval);
+						setLogUpdateInterval(null);
+						setLogViewerActive(false);
+					}
+					if (voiceDashboardInterval) {
+						clearInterval(voiceDashboardInterval);
+						setVoiceDashboardInterval(null);
+						setVoiceDashboardActive(false);
+					}
+				} else if (selectedIndex <= 5) {
 					handleVoiceAction(selectedIndex);
 				}
 				break;
@@ -1512,6 +1685,14 @@ python conversational_voice_control.py`;
 			}
 			return;
 		}
+
+		// Handle voice dashboard
+		if (voiceDashboardActive) {
+			if (key.escape || key.return || input === 'q') {
+				stopVoiceDashboard();
+			}
+			return;
+		}
 		
 		const items = getMenuItems();
 		
@@ -1537,6 +1718,14 @@ python conversational_voice_control.py`;
 			setLogUpdateInterval(null);
 		}
 	}, [logViewerActive, logUpdateInterval]);
+
+	// Cleanup voice dashboard interval when dashboard closes
+	useEffect(() => {
+		if (!voiceDashboardActive && voiceDashboardInterval) {
+			clearInterval(voiceDashboardInterval);
+			setVoiceDashboardInterval(null);
+		}
+	}, [voiceDashboardActive, voiceDashboardInterval]);
 
 	// Get screen title
 	const getScreenTitle = () => {
@@ -1592,6 +1781,73 @@ python conversational_voice_control.py`;
 			
 			h(Text, { color: 'white' }, ''),
 			h(Text, { color: 'gray' }, '🎮 Press Enter, Esc, or Q to return to menu')
+		);
+	}
+
+	// Live Voice Dashboard Component
+	if (voiceDashboardActive) {
+		const sessionTime = voiceStats.sessionStartTime ? 
+			Math.floor((new Date() - voiceStats.sessionStartTime) / 1000) : 0;
+		const successRate = voiceStats.totalCommands > 0 ? 
+			Math.round((voiceStats.successfulCommands / voiceStats.totalCommands) * 100) : 0;
+		
+		return h(Box, { flexDirection: 'column', padding: 1 },
+			h(Text, { color: 'cyan', bold: true }, '🎤 LIVE VOICE COMMAND DASHBOARD'),
+			h(Text, { color: 'cyan' }, '='.repeat(60)),
+			h(Text, { color: 'yellow' }, '🔄 Real-time monitoring - Updates every 1.5 seconds'),
+			h(Text, { color: 'white' }, ''),
+			
+			// Voice Statistics
+			h(Box, { flexDirection: 'row', gap: 2 },
+				h(Box, { flexDirection: 'column', borderStyle: 'round', borderColor: 'green', padding: 1, width: 25 },
+					h(Text, { color: 'green', bold: true }, '📊 SESSION STATS'),
+					h(Text, { color: 'white' }, `Session Time: ${sessionTime}s`),
+					h(Text, { color: 'white' }, `Total Commands: ${voiceStats.totalCommands}`),
+					h(Text, { color: 'green' }, `✅ Successful: ${voiceStats.successfulCommands}`),
+					h(Text, { color: 'red' }, `❌ Failed: ${voiceStats.failedCommands}`),
+					h(Text, { color: 'cyan' }, `📈 Success Rate: ${successRate}%`)
+				),
+				h(Box, { flexDirection: 'column', borderStyle: 'round', borderColor: 'yellow', padding: 1, width: 25 },
+					h(Text, { color: 'yellow', bold: true }, '🎙️ VOICE STATUS'),
+					h(Text, { color: voiceStats.conversationActive ? 'green' : 'gray' }, 
+						`💬 Conversation: ${voiceStats.conversationActive ? 'ACTIVE' : 'IDLE'}`),
+					h(Text, { color: voiceStats.lastWakeWord ? 'green' : 'gray' }, 
+						`🔊 Last Wake: ${voiceStats.lastWakeWord || 'None'}`),
+					h(Text, { color: 'cyan' }, `🤖 Enterprise AI: ONLINE`),
+					h(Text, { color: 'green' }, `🎵 TNG Sounds: READY`)
+				)
+			),
+			
+			h(Text, { color: 'white' }, ''),
+			
+			// Live Command Stream
+			h(Text, { color: 'cyan', bold: true }, '🔄 LIVE COMMAND STREAM (Last 15):'),
+			h(Text, { color: 'cyan' }, '─'.repeat(60)),
+			
+			h(Box, { flexDirection: 'column', borderStyle: 'round', borderColor: 'blue', padding: 1, height: 18 },
+				voiceCommands.length === 0 ? 
+					h(Text, { color: 'gray' }, '💤 Waiting for voice commands...') :
+					voiceCommands.slice(-15).reverse().map((cmd, index) => {
+						const getColor = (type, status) => {
+							if (status === 'error') return 'red';
+							if (type === 'wake') return 'yellow';
+							if (type === 'transcription') return 'cyan';
+							if (type === 'response') return 'green';
+							if (type === 'appletv') return 'magenta';
+							if (type === 'homekit') return 'blue';
+							return 'white';
+						};
+						
+						return h(Text, { 
+							key: cmd.id,
+							color: getColor(cmd.type, cmd.status) 
+						}, `[${cmd.timestamp}] ${cmd.content}`);
+					})
+			),
+			
+			h(Text, { color: 'white' }, ''),
+			h(Text, { color: 'gray' }, '🎮 Press Enter, Esc, or Q to return to menu'),
+			h(Text, { color: 'green' }, '💡 Tip: Try saying "Computer, what time is it?" to see live updates!')
 		);
 	}
 
